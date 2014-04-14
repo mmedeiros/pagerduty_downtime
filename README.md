@@ -1,6 +1,8 @@
 pagerduty_downtime
 ==================
 
+(This is a work in progress) 
+
 Command-line tool for creating maintenance windows in PagerDuty app. 
 
 Configure the values in the "Configurable parameters" block for your subdomain,
