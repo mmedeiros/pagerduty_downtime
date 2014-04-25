@@ -1,16 +1,17 @@
 #!/usr/bin/perl 
 
-use strict;
-use Data::Dumper;
-use JSON qw( decode_json );
-use Getopt::Long qw(GetOptions);
-use Time::Local;
-
+# Author - Matt Medeiros: http://github.com/mmedeiros 
 ######### This script ###########
 # 1) Authenticates against pagerduty  
 # 2) Gets the service list 
 # 3) Lets the user decide which services to put in maintenance window. 
 # 4) Lets the user decide the length of the maintenance window. (defaults to "30 minutes")
+
+use strict;
+use Data::Dumper;
+use JSON qw( decode_json );
+use Getopt::Long qw(GetOptions);
+use Time::Local;
 
 #### Configurable parameters ####
 my $subdomain = "CHANGEME!!!";  # Your pagerduty subdomain (e.g. acme.pagerduty.com is "acme") 
