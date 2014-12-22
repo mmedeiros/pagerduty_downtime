@@ -1,10 +1,10 @@
-#!/usr/bin/perl 
+#!/usr/bin/perl
 
-# Author - Matt Medeiros: http://github.com/mmedeiros 
+# Author - Matt Medeiros: http://github.com/mmedeiros
 ######### This script ###########
-# 1) Authenticates against pagerduty  
-# 2) Gets the service list 
-# 3) Lets the user decide which services to put in maintenance window. 
+# 1) Authenticates against pagerduty
+# 2) Gets the service list
+# 3) Lets the user decide which services to put in maintenance window.
 # 4) Lets the user decide the length of the maintenance window. (defaults to "30 minutes")
 
 use strict;
@@ -14,128 +14,128 @@ use Getopt::Long qw(GetOptions);
 use Time::Local;
 
 #### Configurable parameters ####
-my $subdomain = "CHANGEME!!!";  # Your pagerduty subdomain (e.g. acme.pagerduty.com is "acme") 
+my $subdomain = "CHANGEME!!!";  # Your pagerduty subdomain (e.g. acme.pagerduty.com is "acme")
 my $token     = "CHANGEME!!!";  # Generate here: https://DOMAIN.pagerduty.com/api_keys
 my $requestor = "CHANGEME!!!";  # Get here: https://DOMAIN.pagerduty.com/users (ex: PP1565R)
-my $downtime  = "30";           # downtime in minutes, override with "--time" flag 
+my $downtime  = "30";           # downtime in minutes, override with "--time" flag
 my $message   = "automated maintenance window"; # override with --message flag
 
-# Variables 
-my (%options,$year,$month,$day,$hour,$minute,$second,$offset,$start,$end,$maint_url, 
+# Variables
+my (%options,$year,$month,$day,$hour,$minute,$second,$offset,$start,$end,$maint_url,
   %services_to_maint,$service_url,$resource_url,@services,$username,@input,$input,
   $now,@api_calls,$header_string);
 $service_url = "https://${subdomain}.pagerduty.com/api/v1/services";
-$maint_url = "https://${subdomain}.pagerduty.com/api/v1/maintenance_windows"; 
+$maint_url = "https://${subdomain}.pagerduty.com/api/v1/maintenance_windows";
 $header_string = '"Content-type: application/json" -H "Authorization: Token token='.${token}.'"';
 
 # Valid options
 if ( ! GetOptions(\%options,
   "force",
   "help",
-  "debug", 
+  "debug",
   "services=s" => \@services,
   "time=i" => \$downtime,
-  "username=s" => \$username, 
+  "username=s" => \$username,
   "message=s" => \$message,
   )
-) { 
+) {
   usage() and die("$!");
 }
 
-if (exists $options{help}) { 
+if (exists $options{help}) {
   usage() and die "\n";
 }
 
 # Time is time-consuming
-# Get the start time for the API call 
+# Get the start time for the API call
 $now=`date +%Y-%m-%d-%H-%M-%S`; # time for machines
-chomp $now; 
+chomp $now;
 ($year,$month,$day,$hour,$minute,$second) = (split /-/, $now);
-my $start_time = "${year}-${month}-${day}T${hour}:${minute}:${second}-04:00Z"; 
+my $start_time = "${year}-${month}-${day}T${hour}:${minute}:${second}-04:00Z";
 
-# Get the start time for math 
-my $epoch = `date +%s`; 
+# Get the start time for math
+my $epoch = `date +%s`;
 chomp $epoch;
 
-# Convert downtime to seconds and add to start time 
+# Convert downtime to seconds and add to start time
 my $endepoch = ( $epoch + ($downtime * 60) );
 
-# Dump date fields to variables 
-my ($endmonth,$endday,$endyear,$endhr,$endmin,$endsec) = (localtime($endepoch))[4,3,5,2,1,0]; 
+# Dump date fields to variables
+my ($endmonth,$endday,$endyear,$endhr,$endmin,$endsec) = (localtime($endepoch))[4,3,5,2,1,0];
 
 # dumb epoch conversion stuff
-$endmonth=($endmonth + 1);   
+$endmonth=($endmonth + 1);
 $endyear=($endyear + 1900);
 
-# Format all the strings 
+# Format all the strings
 $endmonth = &leading_zeros ($endmonth, 2);
 $endday   = &leading_zeros ($endday, 2);
 $endhr    = &leading_zeros ($endhr, 2);
 $endmin   = &leading_zeros ($endmin, 2);
 $endsec   = &leading_zeros ($endsec, 2);
 
-# Format the API call end time 
-my $end_time = "${endyear}-${endmonth}-${endday}T${endhr}:${endmin}:${second}-04:00Z"; 
+# Format the API call end time
+my $end_time = "${endyear}-${endmonth}-${endday}T${endhr}:${endmin}:${second}-04:00Z";
 
-### Get the user running the script if not passed 
+### Get the user running the script if not passed
 ### TODO dump into subroutine against users api and do fuzzy matching
 if ($username eq "") {
   $username = `whoami`;
-  chomp $username; 
+  chomp $username;
 }
 
 # Add the system username to the message passed to the API
 $message = $message.' -'.$username;
 
-### Authenticate and get the list of services 
+### Authenticate and get the list of services
 $resource_url = "curl -H ${header_string} -X GET -G ${service_url}";
 
-# LWP doesn't support authentication, shelling out is cleaner 
-my $json = `$resource_url 2>/dev/null`; 
+# LWP doesn't support authentication, shelling out is cleaner
+my $json = `$resource_url 2>/dev/null`;
 die "Could not get $resource_url\nCheck to make sure Pagerduty API is available\n" unless defined $json;
 
-# Make the json an object 
-bless \$json; 
+# Make the json an object
+bless \$json;
 # Decode the entire JSON
 my $decoded_json = decode_json( $json );
 
 # Get the service names and build the hash
-foreach my $hashref (@{${$decoded_json}{'services'}}){ 
+foreach my $hashref (@{${$decoded_json}{'services'}}){
   my $pd_id = ${$hashref}{'id'};
   $services_to_maint{$pd_id}{name}  = ${$hashref}{'name'};
   $services_to_maint{$pd_id}{maint} = 'no';
   $services_to_maint{$pd_id}{requester_id} = $username;
 }
 
-my $i = 1; 
+my $i = 1;
 print "The following services are configured for this account\n" unless exists $options{force} ;
 foreach my $key (sort keys %services_to_maint) {
-  $services_to_maint{$key}{'int'} = $i; 
+  $services_to_maint{$key}{'int'} = $i;
   print "$services_to_maint{$key}{'int'}) $key - $services_to_maint{$key}{'name'}\n" unless exists $options{force};
   $i++;
 }
 
-# Which services get mainted? 
+# Which services get mainted?
 # User input time, unless we are going nuclear
-unless (exists $options{force}) { 
+unless (exists $options{force}) {
   print "\nEnter the service number to set a maintenance window.\n";
   print "example: 1,3,5 (Enter 0 for ALL)\n";
   print "enter your selection: ";
   $input = <STDIN>;
-  @input=split/,/=> $input; 
+  @input=split/,/=> $input;
 }
 
 # Flip the bit on the services selected by the user
-# Go nuclear if there's a zero 
+# Go nuclear if there's a zero
 if ((grep (/0|all/, @input)) || (exists $options{force}) ) {
   print "Nuclear option was found!!!! Fire zee missiles!!!\n" ;
-  foreach my $key (sort keys %services_to_maint) { 
+  foreach my $key (sort keys %services_to_maint) {
     $services_to_maint{$key}{'maint'} = 'yes';
   }
-} else { 
-  foreach my $stat (@input) { 
-    foreach my $key (sort keys %services_to_maint) { 
-      if ($stat == $services_to_maint{$key}{'int'}) { 
+} else {
+  foreach my $stat (@input) {
+    foreach my $key (sort keys %services_to_maint) {
+      if ($stat == $services_to_maint{$key}{'int'}) {
         $services_to_maint{$key}{'maint'} = 'yes';
       }
     }
@@ -143,38 +143,38 @@ if ((grep (/0|all/, @input)) || (exists $options{force}) ) {
 }
 
 # Set the maintenance window
-# Text to the user 
+# Text to the user
 print "\nThe following actions are being taken:\n";
 
-# Grab the services being mainted 
+# Grab the services being mainted
 foreach my $key (sort keys %services_to_maint) {
   if ($services_to_maint{$key}{'maint'} eq 'yes'){
-    
-    # Text to user 
+
+    # Text to user
     print "Service (".$key.") \"".$services_to_maint{$key}{'name'}."\" is being set to $downtime minute downtime\n";
-  
-    # Build post params, api call, push api calls to array 
+
+    # Build post params, api call, push api calls to array
     my $post_params = <<POST_PARAM;
 '{"maintenance_window":{"start_time":"$start_time","end_time":"$end_time","description":"$message","service_ids":["$key"] },"requester_id":"$requestor"}'
 POST_PARAM
     chomp $post_params;
     my $api_call = "curl -H ${header_string} -X POST -d $post_params"." $maint_url";
-    push @api_calls, $api_call; 
+    push @api_calls, $api_call;
   }
 }
 
-# Trigger all the api calls 
+# Trigger all the api calls
 foreach (@api_calls) {
   chomp $_;
-  if (exists $options{debug}) { 
+  if (exists $options{debug}) {
     print "$_\n";
-  } else { 
+  } else {
     `$_ 2>/dev/null`;
   }
 }
 
 #### Debug stuff
-if (exists $options{debug}) { 
+if (exists $options{debug}) {
   print "header string $header_string\n";
   print "epoch = $epoch\n";
   print "endepoch = $endepoch\n";
@@ -187,25 +187,25 @@ if (exists $options{debug}) {
 }
 
 ########
-sub usage { 
+sub usage {
   print "usage: $0 --services=PSJ8AMH --time=30\n";
   print "Set pagerduty downtime with parameters\n";
   print "nuclear option: $0 --force\n";
   print "sets all services down for 30 minutes\n";
 }
 
-######### 
-sub leading_zeros { 
-  my $num = sprintf("%0$_[1]s", $_[0]); 
+#########
+sub leading_zeros {
+  my $num = sprintf("%0$_[1]s", $_[0]);
   return $num;
 }
 
-# NOTES 
-# This is the properly constructed API call per 
+# NOTES
+# This is the properly constructed API call per
 # http://developer.pagerduty.com/documentation/rest/maintenance_windows/create
 
 #curl -H "Content-type: application/json" -H "Authorization: Token token=E7px6VVr3PVHZPJq51oa" -X POST \
-#    -d '{    
+#    -d '{
 #      "maintenance_window": {
 #        "start_time": "2012-06-16T13:00:00-04:00Z",
 #        "end_time": "2012-06-16T14:00:00-04:00Z",
